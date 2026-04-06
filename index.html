@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>مركبة الفضاء</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #06060f;
+      color: #fff;
+      font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 100vh;
+      padding: 20px 16px;
+    }
+    h1 {
+      font-size: 22px;
+      font-weight: 500;
+      margin-bottom: 14px;
+      color: #85b7eb;
+      letter-spacing: 1px;
+    }
+    #hud {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 12px;
+      width: 100%;
+      max-width: 420px;
+    }
+    .hud-card {
+      flex: 1;
+      background: #12122a;
+      border-radius: 10px;
+      padding: 8px 14px;
+      border: 0.5px solid rgba(255,255,255,0.08);
+    }
+    .hud-label { font-size: 11px; color: #888; margin-bottom: 2px; }
+    .hud-val { font-size: 22px; font-weight: 500; color: #fff; }
+    canvas {
+      border: 0.5px solid rgba(255,255,255,0.12);
+      border-radius: 12px;
+      background: #0a0a1a;
+      display: block;
+      touch-action: none;
+      cursor: pointer;
+      max-width: 100%;
+    }
+    #msg {
+      margin-top: 10px;
+      font-size: 13px;
+      color: #666;
+      text-align: center;
+    }
+    #startBtn {
+      margin-top: 12px;
+      padding: 11px 32px;
+      border-radius: 10px;
+      border: 0.5px solid rgba(255,255,255,0.18);
+      background: #12122a;
+      color: #85b7eb;
+      font-size: 15px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    #startBtn:hover { background: #1a1a3a; }
+    #instructions {
+      margin-top: 16px;
+      font-size: 12px;
+      color: #555;
+      text-align: center;
+      line-height: 1.8;
+    }
+  </style>
+</head>
+<body>
+  <h1>مركبة الفضاء</h1>
+  <div id="hud">
+    <div class="hud-card"><div class="hud-label">النقاط</div><div class="hud-val" id="scoreEl">0</div></div>
+    <div class="hud-card"><div class="hud-label">أفضل نتيجة</div><div class="hud-val" id="bestEl">0</div></div>
+    <div class="hud-card"><div class="hud-label">المستوى</div><div class="hud-val" id="levelEl">1</div></div>
+  </div>
+  <canvas id="gameCanvas" width="420" height="520"></canvas>
+  <div id="msg">اضغط على الزر للبدء</div>
+  <button id="startBtn" onclick="startGame()">ابدأ اللعبة</button>
+  <div id="instructions">
+    كيبورد: السهم يمين/يسار أو A/D<br>
+    موبايل: الضغط على الجانب اللي بدك تروح فيه
+  </div>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('scoreEl');
+    const bestEl = document.getElementById('bestEl');
+    const levelEl = document.getElementById('levelEl');
+    const msgEl = document.getElementById('msg');
+    const startBtn = document.getElementById('startBtn');
+
+    const W = canvas.width, H = canvas.height;
+    const SHIP_W = 28, SHIP_H = 36;
+    const COLORS = ['#e24b4a','#ef9f27','#5dcaa5','#7f77dd','#d4537e'];
+
+    let ship, obstacles, stars, score, best = 0, level, frame, running, animId;
+
+    function initStars() {
+      stars = [];
+      for (let i = 0; i < 60; i++) {
+        stars.push({
+          x: Math.random() * W,
+          y: Math.random() * H,
+          r: Math.random() * 1.5 + 0.3,
+          speed: Math.random() * 1.2 + 0.3
+        });
+      }
+    }
+
+    function startGame() {
+      ship = { x: W / 2, y: H - 80, vx: 0, thrust: false };
+      obstacles = [];
+      score = 0; level = 1; frame = 0; running = true;
+      initStars();
+      scoreEl.textContent = 0;
+      levelEl.textContent = 1;
+      msgEl.textContent = 'السهام أو اللمس للتحريك';
+      startBtn.textContent = 'إعادة';
+      if (animId) cancelAnimationFrame(animId);
+      loop();
+    }
+
+    function spawnObstacle() {
+      const w = 30 + Math.random() * 50;
+      const x = Math.random() * (W - w);
+      const color = COLORS[Math.floor(Math.random() * COLORS.length)];
+      const speed = 2.5 + level * 0.6 + Math.random() * 1.5;
+      const type = Math.random() > 0.5 ? 'rect' : 'diamond';
+      obstacles.push({ x, y: -40, w, h: 24 + Math.random() * 16, color, speed, type });
+    }
+
+    function drawShip(x, y) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.fillStyle = '#85b7eb';
+      ctx.beginPath();
+      ctx.moveTo(0, -SHIP_H / 2);
+      ctx.lineTo(SHIP_W / 2, SHIP_H / 2);
+      ctx.lineTo(SHIP_W * 0.2, SHIP_H * 0.3);
+      ctx.lineTo(-SHIP_W * 0.2, SHIP_H * 0.3);
+      ctx.lineTo(-SHIP_W / 2, SHIP_H / 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#378add';
+      ctx.beginPath();
+      ctx.moveTo(0, -SHIP_H * 0.3);
+      ctx.lineTo(SHIP_W * 0.2, SHIP_H * 0.15);
+      ctx.lineTo(-SHIP_W * 0.2, SHIP_H * 0.15);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#b5d4f4';
+      ctx.beginPath();
+      ctx.ellipse(0, -SHIP_H * 0.05, 6, 8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      if (ship.thrust) {
+        ctx.fillStyle = '#ef9f27';
+        ctx.beginPath();
+        ctx.moveTo(-8, SHIP_H * 0.3);
+        ctx.lineTo(8, SHIP_H * 0.3);
+        ctx.lineTo(0, SHIP_H * 0.3 + 10 + Math.random() * 8);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawObstacle(o) {
+      ctx.fillStyle = o.color;
+      if (o.type === 'diamond') {
+        ctx.save();
+        ctx.translate(o.x + o.w / 2, o.y + o.h / 2);
+        ctx.beginPath();
+        ctx.moveTo(0, -o.h / 2);
+        ctx.lineTo(o.w / 2, 0);
+        ctx.lineTo(0, o.h / 2);
+        ctx.lineTo(-o.w / 2, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      } else {
+        ctx.beginPath();
+        ctx.roundRect(o.x, o.y, o.w, o.h, 6);
+        ctx.fill();
+      }
+    }
+
+    function collides(s, o) {
+      const margin = 6;
+      return s.x - SHIP_W / 2 + margin < o.x + o.w &&
+             s.x + SHIP_W / 2 - margin > o.x &&
+             s.y - SHIP_H / 2 + margin < o.y + o.h &&
+             s.y + SHIP_H / 2 - margin > o.y;
+    }
+
+    const keys = {};
+    document.addEventListener('keydown', e => { keys[e.key] = true; });
+    document.addEventListener('keyup', e => { keys[e.key] = false; });
+
+    let touchX = null;
+    canvas.addEventListener('touchstart', e => { touchX = e.touches[0].clientX; e.preventDefault(); }, { passive: false });
+    canvas.addEventListener('touchmove', e => { touchX = e.touches[0].clientX; e.preventDefault(); }, { passive: false });
+    canvas.addEventListener('touchend', () => { touchX = null; });
+
+    function loop() {
+      if (!running) return;
+      frame++;
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = '#0a0a1a';
+      ctx.fillRect(0, 0, W, H);
+
+      for (let s of stars) {
+        s.y += s.speed;
+        if (s.y > H) { s.y = 0; s.x = Math.random() * W; }
+        ctx.fillStyle = `rgba(255,255,255,${0.3 + s.r * 0.3})`;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      const spawnRate = Math.max(40, 90 - level * 8);
+      if (frame % spawnRate === 0) spawnObstacle();
+
+      level = 1 + Math.floor(score / 300);
+      levelEl.textContent = level;
+
+      let ax = 0;
+      if (keys['ArrowLeft'] || keys['a'] || keys['A']) ax = -1;
+      if (keys['ArrowRight'] || keys['d'] || keys['D']) ax = 1;
+      if (touchX !== null) {
+        const rect = canvas.getBoundingClientRect();
+        const tx = (touchX - rect.left) * (W / rect.width);
+        ax = tx < ship.x ? -1 : 1;
+        if (Math.abs(tx - ship.x) < 10) ax = 0;
+      }
+      ship.thrust = ax !== 0;
+      ship.vx += ax * 0.7;
+      ship.vx *= 0.82;
+      ship.x += ship.vx;
+      ship.x = Math.max(SHIP_W / 2, Math.min(W - SHIP_W / 2, ship.x));
+
+      for (let i = obstacles.length - 1; i >= 0; i--) {
+        const o = obstacles[i];
+        o.y += o.speed;
+        if (o.y > H + 50) {
+          obstacles.splice(i, 1);
+          score += 10;
+          scoreEl.textContent = score;
+          continue;
+        }
+        drawObstacle(o);
+        if (collides(ship, o)) { endGame(); return; }
+      }
+
+      drawShip(ship.x, ship.y);
+      animId = requestAnimationFrame(loop);
+    }
+
+    function endGame() {
+      running = false;
+      if (score > best) { best = score; bestEl.textContent = best; }
+      ctx.fillStyle = 'rgba(10,10,26,0.75)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#e24b4a';
+      ctx.font = '500 28px sans-serif';
+      ctx.fillText('انتهت اللعبة!', W / 2, H / 2 - 30);
+      ctx.fillStyle = '#85b7eb';
+      ctx.font = '18px sans-serif';
+      ctx.fillText('النقاط: ' + score, W / 2, H / 2 + 10);
+      ctx.fillStyle = '#666';
+      ctx.font = '14px sans-serif';
+      ctx.fillText('اضغط "إعادة" للعب مرة ثانية', W / 2, H / 2 + 44);
+      msgEl.textContent = 'انتهت اللعبة! نقاطك: ' + score;
+    }
+
+    initStars();
+    ctx.fillStyle = '#0a0a1a';
+    ctx.fillRect(0, 0, W, H);
+    for (let s of stars) {
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = '#85b7eb';
+    ctx.font = '500 22px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('مركبة الفضاء', W / 2, H / 2 - 20);
+    ctx.fillStyle = '#666';
+    ctx.font = '14px sans-serif';
+    ctx.fillText('تحاشى العوائق وحقق أعلى نتيجة', W / 2, H / 2 + 16);
+  </script>
+</body>
+</html>
